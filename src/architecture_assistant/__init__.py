@@ -1,1 +1,1 @@
-"""Console chatbot host for the Networks MCP project."""
+"""Chatbot de consola anfitrión del proyecto MCP de Redes."""

@@ -1,4 +1,4 @@
-"""Rich-based terminal presentation helpers."""
+"""Utilidades de presentación para terminal basadas en Rich."""
 
 from rich.console import Console
 from rich.panel import Panel
@@ -8,34 +8,34 @@ console = Console()
 
 
 def show_welcome(model: str, configured: bool) -> None:
-    """Render the initial terminal banner and the available local commands."""
-    status = "[green]ready[/green]" if configured else "[yellow]API key missing[/yellow]"
+    """Muestra el encabezado inicial y los comandos disponibles."""
+    status = "[green]listo[/green]" if configured else "[yellow]falta la clave de API[/yellow]"
     console.print(
         Panel.fit(
-            "[bold cyan]Architecture Assistant[/bold cyan]\n"
-            "Networks Project - MCP Host (Phase 1)\n\n"
-            f"Gemini model: [bold]{model}[/bold]\n"
-            f"Connection status: {status}\n\n"
-            "Commands: [bold]/help[/bold], [bold]/clear[/bold], [bold]/exit[/bold]",
+            "[bold cyan]Asistente de Arquitectura[/bold cyan]\n"
+            "Proyecto de Redes - Anfitrión MCP (Fase 1)\n\n"
+            f"Modelo Gemini: [bold]{model}[/bold]\n"
+            f"Estado de conexión: {status}\n\n"
+            "Comandos: [bold]/ayuda[/bold], [bold]/limpiar[/bold], [bold]/salir[/bold]",
             border_style="cyan",
         )
     )
 
 
 def show_help() -> None:
-    """Display commands available before MCP tools are added."""
+    """Muestra los comandos disponibles antes de agregar herramientas MCP."""
     console.print(
         Panel(
-            "[bold]/help[/bold]  Show this help.\n"
-            "[bold]/clear[/bold] Start a new conversation.\n"
-            "[bold]/exit[/bold]  Close the chatbot.\n\n"
-            "Write any other message to send it to Gemini.",
-            title="Help",
+            "[bold]/ayuda[/bold]    Muestra esta ayuda.\n"
+            "[bold]/limpiar[/bold]  Inicia una conversación nueva.\n"
+            "[bold]/salir[/bold]    Cierra el chatbot.\n\n"
+            "Escribe cualquier otro mensaje para enviarlo a Gemini.",
+            title="Ayuda",
             border_style="blue",
         )
     )
 
 
 def show_error(message: str) -> None:
-    """Render a concise, user-safe error message."""
+    """Muestra un mensaje de error breve y seguro para el usuario."""
     console.print(Panel(message, title="[red]Error[/red]", border_style="red"))

@@ -1,4 +1,4 @@
-"""Entry point for the Phase 1 console chatbot."""
+"""Punto de entrada del chatbot de consola de la Fase 1."""
 
 from architecture_assistant.config import Settings
 from architecture_assistant.llm import GeminiProvider, ProviderUnavailableError
@@ -7,14 +7,14 @@ from rich.panel import Panel
 
 
 def run() -> None:
-    """Run the interactive console session until the user exits."""
+    """Ejecuta la sesión interactiva hasta que el usuario salga."""
     settings = Settings.load()
     show_welcome(settings.gemini_model, configured=bool(settings.gemini_api_key))
 
     if not settings.gemini_api_key:
         show_error(
-            "Create a local .env file from .env.example and set GEMINI_API_KEY "
-            "before starting a chat session."
+            "Crea un archivo .env desde .env.example y configura GEMINI_API_KEY "
+            "antes de iniciar una sesión de chat."
         )
         return
 
@@ -22,35 +22,35 @@ def run() -> None:
 
     while True:
         try:
-            message = console.input("\n[bold green]You[/bold green] > ").strip()
+            message = console.input("\n[bold green]Tú[/bold green] > ").strip()
         except (EOFError, KeyboardInterrupt):
-            console.print("\n[dim]Session closed.[/dim]")
+            console.print("\n[dim]Sesión cerrada.[/dim]")
             return
 
         if not message:
             continue
-        if message == "/exit":
-            console.print("[dim]Session closed.[/dim]")
+        if message in {"/salir", "/exit"}:
+            console.print("[dim]Sesión cerrada.[/dim]")
             return
-        if message == "/help":
+        if message in {"/ayuda", "/help"}:
             show_help()
             continue
-        if message == "/clear":
+        if message in {"/limpiar", "/clear"}:
             provider.reset_context()
-            console.print("[dim]Conversation context cleared.[/dim]")
+            console.print("[dim]Se limpió el contexto de la conversación.[/dim]")
             continue
         if message.startswith("/"):
-            show_error("Unknown command. Use /help to see the available commands.")
+            show_error("Comando desconocido. Usa /ayuda para ver los comandos disponibles.")
             continue
 
         try:
-            with console.status("[cyan]Gemini is thinking...[/cyan]"):
+            with console.status("[cyan]Gemini está pensando...[/cyan]"):
                 answer = provider.ask(message)
-            console.print(Panel(answer, title="[bold cyan]Assistant[/bold cyan]", border_style="cyan"))
+            console.print(Panel(answer, title="[bold cyan]Asistente[/bold cyan]", border_style="cyan"))
         except ProviderUnavailableError as error:
             show_error(str(error))
-        except Exception as error:  # Provider/network errors must not terminate the chat loop.
-            show_error(f"The Gemini request failed: {error}")
+        except Exception as error:  # Los errores de red no deben cerrar el chat.
+            show_error(f"Falló la solicitud a Gemini: {error}")
 
 
 if __name__ == "__main__":

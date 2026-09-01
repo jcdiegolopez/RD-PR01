@@ -1,6 +1,6 @@
-"""Convenient local entry point for the console chatbot.
+"""Punto de entrada sencillo para el chatbot de consola.
 
-Run with: .\\.venv\\Scripts\\python.exe main.py
+Ejecutar con: .\\.venv\\Scripts\\python.exe main.py
 """
 
 from pathlib import Path

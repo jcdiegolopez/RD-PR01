@@ -1,4 +1,4 @@
-"""Tests for safe local configuration handling."""
+"""Pruebas para el manejo seguro de la configuración local."""
 
 import os
 import unittest

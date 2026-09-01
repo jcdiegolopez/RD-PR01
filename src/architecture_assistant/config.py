@@ -1,4 +1,4 @@
-"""Application configuration loaded from environment variables."""
+"""Configuración de la aplicación cargada desde variables de entorno."""
 
 from dataclasses import dataclass
 import os
@@ -12,17 +12,17 @@ LEGACY_MODELS = {"gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"}
 
 @dataclass(frozen=True)
 class Settings:
-    """Runtime settings that never expose secret values in logs."""
+    """Configuración de ejecución que no expone secretos en los registros."""
 
     gemini_api_key: str | None
     gemini_model: str
 
     @classmethod
     def load(cls) -> "Settings":
-        """Load local .env values and return validated application settings."""
+        """Carga los valores de .env y devuelve una configuración validada."""
         load_dotenv()
         api_key = os.getenv("GEMINI_API_KEY")
-        if api_key == "replace_with_your_google_ai_studio_key":
+        if api_key == "reemplaza_con_tu_clave_de_google_ai_studio":
             api_key = None
 
         configured_model = os.getenv("GEMINI_MODEL", DEFAULT_MODEL)
