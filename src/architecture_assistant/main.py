@@ -1,8 +1,9 @@
 """Entry point for the Phase 1 console chatbot."""
 
 from architecture_assistant.config import Settings
-from architecture_assistant.llm import GeminiProvider
+from architecture_assistant.llm import GeminiProvider, ProviderUnavailableError
 from architecture_assistant.ui import console, show_error, show_help, show_welcome
+from rich.panel import Panel
 
 
 def run() -> None:
@@ -46,6 +47,8 @@ def run() -> None:
             with console.status("[cyan]Gemini is thinking...[/cyan]"):
                 answer = provider.ask(message)
             console.print(Panel(answer, title="[bold cyan]Assistant[/bold cyan]", border_style="cyan"))
+        except ProviderUnavailableError as error:
+            show_error(str(error))
         except Exception as error:  # Provider/network errors must not terminate the chat loop.
             show_error(f"The Gemini request failed: {error}")
 
