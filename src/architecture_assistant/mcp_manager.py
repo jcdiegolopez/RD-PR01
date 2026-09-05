@@ -12,6 +12,7 @@ from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.client.streamable_http import streamablehttp_client
 
 from architecture_assistant.mcp_log import McpInteractionLog
 
@@ -73,19 +74,11 @@ class McpManager:
             value,
         )
 
-    async def connect_from_config(
+    async def _connect_stdio_from_config(
         self, server_name: str, server_config: dict[str, Any]
     ) -> tuple[McpTool, ...]:
-        """Conecta un servidor MCP usando la definición del archivo de configuración.
-
-        Soporta los mismos campos que Claude Desktop:
-          command, args, cwd, env
-        Tokens especiales en command/args/cwd:
-          __python__   → sys.executable actual
-          ${VAR}       → variable de entorno VAR
-        """
+        """Conecta un servidor stdio usando campos command/args/cwd/env del config JSON."""
         env_snapshot = dict(os.environ)
-        # Merge server-specific env vars (también con interpolación)
         for key, val in server_config.get("env", {}).items():
             env_snapshot[key] = self._resolve(val, env_snapshot)
 
@@ -94,9 +87,7 @@ class McpManager:
         raw_cwd = server_config.get("cwd", str(Path.cwd()))
         cwd = self._resolve(raw_cwd, env_snapshot)
 
-        # Asegura que cwd sea absoluto (los paths relativos se resuelven desde cwd del proceso)
         cwd = str(Path(cwd).resolve())
-        # También resuelve args que parezcan paths de archivo
         args = [
             str(Path(a).resolve()) if (Path(a).suffix or Path(a).is_dir() or Path(a).is_file()) and not a.startswith("-") else a
             for a in args
@@ -109,6 +100,22 @@ class McpManager:
             env=env_snapshot,
         )
         return await self.connect_stdio(server_name, parameters)
+
+    async def connect_from_config(
+        self, server_name: str, server_config: dict[str, Any]
+    ) -> tuple[McpTool, ...]:
+        """Detecta el transport del config y delega al método correspondiente.
+
+        Soporta:
+          transport: stdio  (por defecto) — campos: command, args, cwd, env
+          transport: http               — campos: url
+        """
+        transport = server_config.get("transport", "stdio")
+        if transport == "http":
+            url = server_config["url"]
+            return await self.connect_http(server_name, url)
+        # stdio (defecto)
+        return await self._connect_stdio_from_config(server_name, server_config)
 
     @staticmethod
     def is_git_repository(workspace: Path) -> bool:
@@ -159,6 +166,42 @@ class McpManager:
                 requires_confirmation=self._requires_confirmation(
                     server_name, tool.name, getattr(tool, "annotations", None)
                 ),
+            )
+            self._tools[public_name] = registered
+            server_tools.append(registered)
+
+        self._clients[server_name] = client
+        return tuple(server_tools)
+
+    async def connect_http(
+        self, server_name: str, url: str
+    ) -> tuple[McpTool, ...]:
+        """Conecta un servidor MCP remoto vía Streamable HTTP (JSON-RPC sobre POST)."""
+        if server_name in self._clients:
+            raise ValueError(f"El servidor MCP '{server_name}' ya está conectado.")
+
+        read_stream, write_stream, _ = await self._stack.enter_async_context(
+            streamablehttp_client(url)
+        )
+        client = await self._stack.enter_async_context(
+            ClientSession(read_stream, write_stream)
+        )
+        await client.initialize()
+        discovered = await client.list_tools()
+        server_tools: list[McpTool] = []
+
+        for tool in discovered.tools:
+            public_name = f"{server_name}__{tool.name}"
+            if public_name in self._tools:
+                raise ValueError(f"La herramienta MCP '{public_name}' ya existe.")
+
+            registered = McpTool(
+                public_name=public_name,
+                server_name=server_name,
+                server_tool_name=tool.name,
+                description=tool.description or "Herramienta MCP sin descripción.",
+                input_schema=tool.inputSchema,
+                requires_confirmation=False,  # servidores remotos son de solo lectura
             )
             self._tools[public_name] = registered
             server_tools.append(registered)

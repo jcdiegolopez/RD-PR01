@@ -1,19 +1,36 @@
-﻿{
+{
   "mcpServers": {
     "filesystem": {
       "command": "cmd",
-      "args": ["/c", "npx", "-y", "@modelcontextprotocol/server-filesystem", "${MCP_DEMO_WORKSPACE}"],
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "${MCP_DEMO_WORKSPACE}"
+      ],
       "cwd": "${MCP_DEMO_WORKSPACE}"
     },
     "git": {
       "command": "__python__",
-      "args": ["-m", "mcp_server_git", "--repository", "${MCP_DEMO_WORKSPACE}"],
+      "args": [
+        "-m",
+        "mcp_server_git",
+        "--repository",
+        "${MCP_DEMO_WORKSPACE}"
+      ],
       "cwd": "${MCP_DEMO_WORKSPACE}"
     },
     "architecture": {
       "command": "__python__",
-      "args": ["C:/ruta/absoluta/a/spring-architecture-analyzer-mcp/server.py"],
+      "args": [
+        "C:/ruta/absoluta/a/spring-architecture-analyzer-mcp/server.py"
+      ],
       "cwd": "C:/ruta/absoluta/a/spring-architecture-analyzer-mcp"
+    },
+    "github-profiler": {
+      "transport": "http",
+      "url": "https://github-spring-profiler-mcp.<tu-subdominio>.workers.dev/"
     }
   }
 }
