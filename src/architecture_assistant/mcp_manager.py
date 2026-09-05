@@ -278,7 +278,10 @@ class McpManager:
 
     async def close(self) -> None:
         """Cierra ordenadamente todos los procesos y conexiones MCP."""
-        await self._stack.aclose()
+        try:
+            await self._stack.aclose()
+        except Exception:
+            pass
 
     @staticmethod
     def _requires_confirmation(

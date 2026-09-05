@@ -12,6 +12,7 @@ from architecture_assistant.ui import (
     confirm_demo_repository_initialization,
     confirm_mcp_call,
     console,
+    make_clickable,
     show_error,
     show_help,
     show_mcp_call,
@@ -23,7 +24,11 @@ from architecture_assistant.ui import (
 
 def run() -> None:
     """Inicia el ciclo asíncrono de la sesión interactiva."""
-    asyncio.run(run_async())
+    try:
+        asyncio.run(run_async())
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        pass
+
 
 
 async def run_async() -> None:
@@ -86,7 +91,10 @@ async def run_async() -> None:
     except Exception as error:
         show_error(f"Error inesperado al iniciar: {error}")
     finally:
-        await mcp_manager.close()
+        try:
+            await mcp_manager.close()
+        except Exception:
+            pass
 
 
 
@@ -163,12 +171,17 @@ async def chat_loop(provider: GeminiProvider, mcp_manager: McpManager) -> None:
 
             answer = turn.text or "La interacción terminó sin una respuesta textual."
             console.print(
-                Panel(answer, title="[bold cyan]Asistente[/bold cyan]", border_style="cyan")
+                Panel(
+                    make_clickable(answer),
+                    title="[bold cyan]Asistente[/bold cyan]",
+                    border_style="cyan",
+                )
             )
         except ProviderUnavailableError as error:
             show_error(str(error))
         except Exception as error:
             show_error(f"Falló la solicitud a Gemini: {error}")
+
 
 
 if __name__ == "__main__":

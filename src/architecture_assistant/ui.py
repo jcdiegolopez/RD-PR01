@@ -1,5 +1,5 @@
-"""Utilidades de presentación para terminal basadas en Rich."""
-
+from pathlib import Path
+import re
 from typing import Any
 
 from rich.console import Console
@@ -11,6 +11,34 @@ from architecture_assistant.mcp_manager import McpTool
 
 
 console = Console()
+
+
+def make_clickable(text: str) -> str:
+    """Convierte URLs y rutas de archivos de Windows en enlaces clicables con Ctrl+Clic."""
+    # 1. URLs web
+    text = re.sub(
+        r'(https?://[^\s)\]\'",]+)',
+        r'[link=\1][underline cyan]\1[/underline cyan][/link]',
+        text,
+    )
+
+    # 2. Rutas locales de Windows
+    def _replace_path(match: re.Match) -> str:
+        raw_path = match.group(0)
+        try:
+            norm_path = raw_path.replace('\\\\', '\\')
+            p = Path(norm_path)
+            uri = p.resolve().as_uri()
+            return f"[link={uri}][bold underline cyan]{raw_path}[/bold underline cyan][/link]"
+        except Exception:
+            return raw_path
+
+    text = re.sub(
+        r'[A-Za-z]:(?:\\\\|\\)[^\\/:*?"<>|\r\n\t]+(?:(?:\\\\|\\)[^\\/:*?"<>|\r\n\t]+)*',
+        _replace_path,
+        text,
+    )
+    return text
 
 
 def ask_for_confirmation(question: str) -> bool:
@@ -111,17 +139,20 @@ def show_mcp_call(entry: McpLogEntry) -> None:
         display_text = raw_text[:600] + f"\n... [salida truncada para la consola, {len(raw_text)} caracteres en total]"
     else:
         display_text = raw_text
+
+    clickable_text = make_clickable(display_text)
     console.print(
         Panel(
             f"Servidor: [bold]{entry.server_name}[/bold]\n"
             f"Herramienta: [bold]{entry.tool_name}[/bold]\n"
             f"Argumentos: {entry.arguments}\n"
-            f"Resultado: {display_text}\n"
+            f"Resultado: {clickable_text}\n"
             f"Estado: {state}",
             title="Llamada MCP",
             border_style="magenta",
         )
     )
+
 
 
 
