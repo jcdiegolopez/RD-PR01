@@ -54,6 +54,13 @@ async def run_async() -> None:
                 return
             mcp_manager.initialize_demo_repository(settings.mcp_demo_workspace)
         await mcp_manager.connect_git_server(settings.mcp_demo_workspace)
+        if settings.arch_server_path and settings.arch_server_path.exists():
+            await mcp_manager.connect_architecture_server(settings.arch_server_path)
+        elif settings.arch_server_path:
+            show_error(
+                f"ARCH_SERVER_PATH apunta a un archivo inexistente: "
+                f"{settings.arch_server_path}. El servidor de arquitectura no se conectará."
+            )
         show_welcome(
             settings.gemini_model,
             configured=True,

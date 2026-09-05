@@ -78,6 +78,18 @@ class McpManager:
         )
         return await self.connect_stdio("git", parameters)
 
+    async def connect_architecture_server(
+        self, server_script: Path
+    ) -> tuple[McpTool, ...]:
+        """Inicia el servidor Spring Architecture Analyzer MCP vía stdio."""
+        parameters = StdioServerParameters(
+            command=sys.executable,
+            args=[str(server_script)],
+            cwd=str(server_script.parent),
+            env=dict(os.environ),
+        )
+        return await self.connect_stdio("architecture", parameters)
+
     @staticmethod
     def is_git_repository(workspace: Path) -> bool:
         """Indica si el espacio aislado ya contiene su propio repositorio Git."""
@@ -210,6 +222,10 @@ class McpManager:
         server_name: str, tool_name: str, annotations: Any
     ) -> bool:
         """Aplica una política conservadora: ante duda, solicita confirmación."""
+        # El servidor de arquitectura es completamente de solo lectura
+        if server_name == "architecture":
+            return False
+
         if server_name not in {"filesystem", "git"}:
             return False
 

@@ -18,6 +18,7 @@ class Settings:
     gemini_api_key: str | None
     gemini_model: str
     mcp_demo_workspace: Path
+    arch_server_path: Path | None
 
     @classmethod
     def load(cls) -> "Settings":
@@ -36,8 +37,17 @@ class Settings:
         if not workspace.is_absolute():
             workspace = Path.cwd() / workspace
 
+        arch_value = os.getenv("ARCH_SERVER_PATH", "")
+        arch_server_path: Path | None = None
+        if arch_value:
+            p = Path(arch_value)
+            if not p.is_absolute():
+                p = Path.cwd() / p
+            arch_server_path = p.resolve()
+
         return cls(
             gemini_api_key=api_key,
             gemini_model=configured_model,
             mcp_demo_workspace=workspace.resolve(),
+            arch_server_path=arch_server_path,
         )
