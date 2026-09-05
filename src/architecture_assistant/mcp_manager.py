@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
@@ -35,8 +36,10 @@ class McpManager:
     def __init__(self) -> None:
         self._stack = AsyncExitStack()
         self._clients: dict[str, ClientSession] = {}
+        self._server_transports: dict[str, str] = {}
         self._tools: dict[str, McpTool] = {}
         self.log = McpInteractionLog()
+
 
     @property
     def tools(self) -> tuple[McpTool, ...]:
@@ -171,6 +174,7 @@ class McpManager:
             server_tools.append(registered)
 
         self._clients[server_name] = client
+        self._server_transports[server_name] = "stdio"
         return tuple(server_tools)
 
     async def connect_http(
@@ -207,7 +211,9 @@ class McpManager:
             server_tools.append(registered)
 
         self._clients[server_name] = client
+        self._server_transports[server_name] = "http"
         return tuple(server_tools)
+
 
     def get_tool(self, public_name: str) -> McpTool:
         """Obtiene una herramienta registrada o indica claramente si no existe."""
@@ -253,28 +259,62 @@ class McpManager:
     async def call_tool(
         self, public_name: str, arguments: dict[str, Any]
     ) -> dict[str, Any]:
-        """Ejecuta una herramienta descubierta y registra el resultado."""
+        """Ejecuta una herramienta descubierta y registra el resultado con métricas de red."""
         tool = self.get_tool(public_name)
         client = self._clients[tool.server_name]
+        transport_kind = self._server_transports.get(tool.server_name, "stdio")
+        
+        if transport_kind == "http":
+            transport_desc = "HTTP / SSE (Remote Cloudflare Edge)"
+            protocol_desc = "JSON-RPC 2.0 (TLS 1.3 / HTTP)"
+        else:
+            transport_desc = "Stdio Anonymous Pipe (Local IPC)"
+            protocol_desc = "JSON-RPC 2.0 (Local Pipe Stream)"
+
+        start_time = time.perf_counter()
         response = await client.call_tool(tool.server_tool_name, arguments)
+        duration_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
+
         text_parts = [
             block.text
             for block in response.content
             if getattr(block, "type", None) == "text"
         ]
+        result_text = "\n".join(text_parts)
         result = {
-            "text": "\n".join(text_parts),
+            "text": result_text,
             "structured_content": getattr(response, "structuredContent", None),
             "is_error": bool(getattr(response, "isError", False)),
         }
+
+        # Estimación de tamaños de paquetes JSON-RPC
+        req_payload = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "method": "tools/call",
+                "params": {"name": tool.server_tool_name, "arguments": arguments},
+                "id": 1,
+            },
+            ensure_ascii=False,
+        )
+        req_bytes = len(req_payload.encode("utf-8"))
+        resp_bytes = len(result_text.encode("utf-8"))
+
         self.log.add(
             server_name=tool.server_name,
             tool_name=tool.server_tool_name,
             arguments=arguments,
             result=result,
             is_error=result["is_error"],
+            transport=transport_desc,
+            latency_ms=duration_ms,
+            request_size=req_bytes,
+            response_size=resp_bytes,
+            protocol=protocol_desc,
+            status_code="500 Internal Error" if result["is_error"] else "200 OK",
         )
         return result
+
 
     async def close(self) -> None:
         """Cierra ordenadamente todos los procesos y conexiones MCP."""
