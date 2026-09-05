@@ -1,4 +1,6 @@
 google-genai>=2.3.0
-mcp>=2.0.0
+# El servidor oficial de Git actualmente requiere la familia 1.x del SDK MCP.
+mcp>=1.29.0,<2.0.0
+mcp-server-git>=2026.8.18
 rich>=13.7.0
 python-dotenv>=1.0.1

@@ -1,9 +1,9 @@
 """Servidor MCP local de demostración para validar el flujo del anfitrión."""
 
-from mcp.server import MCPServer
+from mcp.server.fastmcp import FastMCP
 
 
-mcp = MCPServer(
+mcp = FastMCP(
     "Servidor de demostración",
     instructions="Expone operaciones matemáticas simples para probar una conexión MCP.",
 )

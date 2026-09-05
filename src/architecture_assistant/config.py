@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -16,6 +17,7 @@ class Settings:
 
     gemini_api_key: str | None
     gemini_model: str
+    mcp_demo_workspace: Path
 
     @classmethod
     def load(cls) -> "Settings":
@@ -29,7 +31,13 @@ class Settings:
         if configured_model in LEGACY_MODELS:
             configured_model = DEFAULT_MODEL
 
+        workspace_value = os.getenv("MCP_DEMO_WORKSPACE", "data/mcp-demo-workspace")
+        workspace = Path(workspace_value)
+        if not workspace.is_absolute():
+            workspace = Path.cwd() / workspace
+
         return cls(
             gemini_api_key=api_key,
             gemini_model=configured_model,
+            mcp_demo_workspace=workspace.resolve(),
         )

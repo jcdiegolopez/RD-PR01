@@ -1,12 +1,16 @@
-"""Punto de entrada del chatbot de consola de la Fase 1."""
+"""Punto de entrada del chatbot de consola."""
 
 import asyncio
 import json
+
+from rich.panel import Panel
 
 from architecture_assistant.config import Settings
 from architecture_assistant.llm import GeminiProvider, ProviderUnavailableError
 from architecture_assistant.mcp_manager import McpManager
 from architecture_assistant.ui import (
+    confirm_demo_repository_initialization,
+    confirm_mcp_call,
     console,
     show_error,
     show_help,
@@ -15,7 +19,6 @@ from architecture_assistant.ui import (
     show_tools,
     show_welcome,
 )
-from rich.panel import Panel
 
 
 def run() -> None:
@@ -24,7 +27,7 @@ def run() -> None:
 
 
 async def run_async() -> None:
-    """Ejecuta la sesión del chatbot y mantiene las conexiones MCP activas."""
+    """Conecta los servidores oficiales y mantiene la sesión de chat activa."""
     settings = Settings.load()
 
     if not settings.gemini_api_key:
@@ -39,22 +42,33 @@ async def run_async() -> None:
     mcp_manager = McpManager()
 
     try:
-        await mcp_manager.connect_demo_server()
+        await mcp_manager.connect_filesystem_server(settings.mcp_demo_workspace)
+        if not mcp_manager.is_git_repository(settings.mcp_demo_workspace):
+            if not confirm_demo_repository_initialization(
+                str(settings.mcp_demo_workspace)
+            ):
+                show_error(
+                    "No se inició Git porque no hubo confirmación. "
+                    "La sesión no puede continuar sin el servidor Git."
+                )
+                return
+            mcp_manager.initialize_demo_repository(settings.mcp_demo_workspace)
+        await mcp_manager.connect_git_server(settings.mcp_demo_workspace)
         show_welcome(
             settings.gemini_model,
             configured=True,
             mcp_tool_count=len(mcp_manager.tools),
+            workspace=str(settings.mcp_demo_workspace),
         )
         await chat_loop(provider, mcp_manager)
     except Exception as error:
-        show_error(f"No fue posible iniciar el servidor MCP de demostración: {error}")
+        show_error(f"No fue posible iniciar los servidores MCP oficiales: {error}")
     finally:
         await mcp_manager.close()
 
 
 async def chat_loop(provider: GeminiProvider, mcp_manager: McpManager) -> None:
     """Procesa mensajes, herramientas MCP y comandos de la consola."""
-
     while True:
         try:
             message = console.input("\n[bold green]Tú[/bold green] > ").strip()
@@ -91,9 +105,17 @@ async def chat_loop(provider: GeminiProvider, mcp_manager: McpManager) -> None:
             while turn.function_calls:
                 function_results: list[dict[str, object]] = []
                 for function_call in turn.function_calls:
-                    result = await mcp_manager.call_tool(
-                        function_call.name, function_call.arguments
-                    )
+                    tool = mcp_manager.get_tool(function_call.name)
+                    if tool.requires_confirmation and not confirm_mcp_call(
+                        tool, function_call.arguments
+                    ):
+                        result = mcp_manager.record_cancelled_call(
+                            function_call.name, function_call.arguments
+                        )
+                    else:
+                        result = await mcp_manager.call_tool(
+                            function_call.name, function_call.arguments
+                        )
                     show_mcp_call(mcp_manager.log.entries[-1])
                     function_results.append(
                         {
@@ -117,10 +139,12 @@ async def chat_loop(provider: GeminiProvider, mcp_manager: McpManager) -> None:
                     )
 
             answer = turn.text or "La interacción terminó sin una respuesta textual."
-            console.print(Panel(answer, title="[bold cyan]Asistente[/bold cyan]", border_style="cyan"))
+            console.print(
+                Panel(answer, title="[bold cyan]Asistente[/bold cyan]", border_style="cyan")
+            )
         except ProviderUnavailableError as error:
             show_error(str(error))
-        except Exception as error:  # Los errores de red no deben cerrar el chat.
+        except Exception as error:
             show_error(f"Falló la solicitud a Gemini: {error}")
 
 

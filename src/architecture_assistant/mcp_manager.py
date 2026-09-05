@@ -2,13 +2,14 @@
 
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
-import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 from typing import Any
 
-from mcp import Client, StdioServerParameters
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
 
 from architecture_assistant.mcp_log import McpInteractionLog
 
@@ -22,6 +23,7 @@ class McpTool:
     server_tool_name: str
     description: str
     input_schema: dict[str, Any]
+    requires_confirmation: bool
 
 
 class McpManager:
@@ -29,7 +31,7 @@ class McpManager:
 
     def __init__(self) -> None:
         self._stack = AsyncExitStack()
-        self._clients: dict[str, Client] = {}
+        self._clients: dict[str, ClientSession] = {}
         self._tools: dict[str, McpTool] = {}
         self.log = McpInteractionLog()
 
@@ -44,10 +46,55 @@ class McpManager:
         parameters = StdioServerParameters(
             command=sys.executable,
             args=[str(server_file)],
-            cwd=Path.cwd(),
+            cwd=str(Path.cwd()),
             env=dict(os.environ),
         )
         return await self.connect_stdio("demostracion", parameters)
+
+    async def connect_filesystem_server(self, workspace: Path) -> tuple[McpTool, ...]:
+        """Inicia el servidor oficial Filesystem limitado a una carpeta aislada."""
+        workspace.mkdir(parents=True, exist_ok=True)
+        parameters = StdioServerParameters(
+            command="cmd",
+            args=[
+                "/c",
+                "npx",
+                "-y",
+                "@modelcontextprotocol/server-filesystem",
+                str(workspace),
+            ],
+            cwd=str(workspace),
+            env=dict(os.environ),
+        )
+        return await self.connect_stdio("filesystem", parameters)
+
+    async def connect_git_server(self, workspace: Path) -> tuple[McpTool, ...]:
+        """Inicia el servidor oficial Git restringido al espacio de demostración."""
+        parameters = StdioServerParameters(
+            command=sys.executable,
+            args=["-m", "mcp_server_git", "--repository", str(workspace)],
+            cwd=str(workspace),
+            env=dict(os.environ),
+        )
+        return await self.connect_stdio("git", parameters)
+
+    @staticmethod
+    def is_git_repository(workspace: Path) -> bool:
+        """Indica si el espacio aislado ya contiene su propio repositorio Git."""
+        return (workspace / ".git").is_dir()
+
+    @staticmethod
+    def initialize_demo_repository(workspace: Path) -> None:
+        """Inicializa Git solo dentro del espacio aislado tras autorización explícita."""
+        completed = subprocess.run(
+            ["git", "init", str(workspace)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip()
+            raise RuntimeError(f"No fue posible inicializar Git: {detail}")
 
     async def connect_stdio(
         self, server_name: str, parameters: StdioServerParameters
@@ -56,8 +103,13 @@ class McpManager:
         if server_name in self._clients:
             raise ValueError(f"El servidor MCP '{server_name}' ya está conectado.")
 
-        client = Client(parameters)
-        await self._stack.enter_async_context(client)
+        read_stream, write_stream = await self._stack.enter_async_context(
+            stdio_client(parameters)
+        )
+        client = await self._stack.enter_async_context(
+            ClientSession(read_stream, write_stream)
+        )
+        await client.initialize()
         discovered = await client.list_tools()
         server_tools: list[McpTool] = []
 
@@ -71,13 +123,23 @@ class McpManager:
                 server_name=server_name,
                 server_tool_name=tool.name,
                 description=tool.description or "Herramienta MCP sin descripción.",
-                input_schema=tool.input_schema,
+                input_schema=tool.inputSchema,
+                requires_confirmation=self._requires_confirmation(
+                    server_name, tool.name, getattr(tool, "annotations", None)
+                ),
             )
             self._tools[public_name] = registered
             server_tools.append(registered)
 
         self._clients[server_name] = client
         return tuple(server_tools)
+
+    def get_tool(self, public_name: str) -> McpTool:
+        """Obtiene una herramienta registrada o indica claramente si no existe."""
+        tool = self._tools.get(public_name)
+        if tool is None:
+            raise ValueError(f"La herramienta MCP '{public_name}' no existe.")
+        return tool
 
     def gemini_tools(self) -> list[dict[str, Any]]:
         """Convierte los esquemas MCP al formato de funciones de Gemini."""
@@ -94,12 +156,30 @@ class McpManager:
             for tool in self.tools
         ]
 
-    async def call_tool(self, public_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        """Ejecuta una herramienta descubierta y registra el resultado."""
-        tool = self._tools.get(public_name)
-        if tool is None:
-            raise ValueError(f"La herramienta MCP '{public_name}' no existe.")
+    def record_cancelled_call(
+        self, public_name: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Registra una operación rechazada sin enviarla al servidor MCP."""
+        tool = self.get_tool(public_name)
+        result = {
+            "text": "La operación fue cancelada por la persona usuaria.",
+            "structured_content": None,
+            "is_error": True,
+        }
+        self.log.add(
+            server_name=tool.server_name,
+            tool_name=tool.server_tool_name,
+            arguments=arguments,
+            result=result,
+            is_error=True,
+        )
+        return result
 
+    async def call_tool(
+        self, public_name: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Ejecuta una herramienta descubierta y registra el resultado."""
+        tool = self.get_tool(public_name)
         client = self._clients[tool.server_name]
         response = await client.call_tool(tool.server_tool_name, arguments)
         text_parts = [
@@ -109,15 +189,15 @@ class McpManager:
         ]
         result = {
             "text": "\n".join(text_parts),
-            "structured_content": response.structured_content,
-            "is_error": response.is_error,
+            "structured_content": getattr(response, "structuredContent", None),
+            "is_error": bool(getattr(response, "isError", False)),
         }
         self.log.add(
             server_name=tool.server_name,
             tool_name=tool.server_tool_name,
             arguments=arguments,
             result=result,
-            is_error=response.is_error,
+            is_error=result["is_error"],
         )
         return result
 
@@ -125,6 +205,29 @@ class McpManager:
         """Cierra ordenadamente todos los procesos y conexiones MCP."""
         await self._stack.aclose()
 
-    def describe_tools(self) -> str:
-        """Crea una descripción breve de las herramientas para el estado visual."""
-        return json.dumps([tool.public_name for tool in self.tools], ensure_ascii=False)
+    @staticmethod
+    def _requires_confirmation(
+        server_name: str, tool_name: str, annotations: Any
+    ) -> bool:
+        """Aplica una política conservadora: ante duda, solicita confirmación."""
+        if server_name not in {"filesystem", "git"}:
+            return False
+
+        if annotations is not None and getattr(annotations, "readOnlyHint", None) is True:
+            return False
+
+        read_only_prefixes = (
+            "read_",
+            "list_",
+            "search_",
+            "get_",
+            "directory_tree",
+            "git_status",
+            "git_diff",
+            "git_log",
+            "git_show",
+            "git_branch",
+            "git_remote",
+            "git_tag",
+        )
+        return not tool_name.lower().startswith(read_only_prefixes)

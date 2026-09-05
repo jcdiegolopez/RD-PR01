@@ -17,6 +17,7 @@ class SettingsTests(unittest.TestCase):
 
         self.assertIsNone(settings.gemini_api_key)
         self.assertEqual(settings.gemini_model, DEFAULT_MODEL)
+        self.assertEqual(settings.mcp_demo_workspace.name, "mcp-demo-workspace")
 
     @patch("architecture_assistant.config.load_dotenv")
     def test_reads_configured_values(self, _: MagicMock) -> None:
@@ -29,6 +30,13 @@ class SettingsTests(unittest.TestCase):
 
         self.assertEqual(settings.gemini_api_key, "test-key")
         self.assertEqual(settings.gemini_model, "test-model")
+
+    @patch("architecture_assistant.config.load_dotenv")
+    def test_resolves_custom_workspace(self, _: MagicMock) -> None:
+        with patch.dict(os.environ, {"MCP_DEMO_WORKSPACE": "demo"}, clear=True):
+            settings = Settings.load()
+
+        self.assertEqual(settings.mcp_demo_workspace.name, "demo")
 
     @patch("architecture_assistant.config.load_dotenv")
     def test_replaces_legacy_model_with_current_default(self, _: MagicMock) -> None:

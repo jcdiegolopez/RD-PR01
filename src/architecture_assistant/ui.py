@@ -1,5 +1,7 @@
 """Utilidades de presentación para terminal basadas en Rich."""
 
+from typing import Any
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -11,16 +13,26 @@ from architecture_assistant.mcp_manager import McpTool
 console = Console()
 
 
-def show_welcome(model: str, configured: bool, mcp_tool_count: int) -> None:
+def ask_for_confirmation(question: str) -> bool:
+    """Solicita una respuesta breve en español y acepta sí o no."""
+    answer = console.input(f"[bold yellow]{question} [s/N][/bold yellow] ").strip().lower()
+    return answer in {"s", "si", "sí", "y", "yes"}
+
+
+def show_welcome(
+    model: str, configured: bool, mcp_tool_count: int, workspace: str | None = None
+) -> None:
     """Muestra el encabezado inicial y los comandos disponibles."""
     status = "[green]listo[/green]" if configured else "[yellow]falta la clave de API[/yellow]"
+    workspace_line = f"Espacio aislado: [dim]{workspace}[/dim]\n\n" if workspace else ""
     console.print(
         Panel.fit(
             "[bold cyan]Asistente de Arquitectura[/bold cyan]\n"
-            "Proyecto de Redes - Anfitrión MCP (Fase 2)\n\n"
+            "Proyecto de Redes - Anfitrión MCP (Fase 3)\n\n"
             f"Modelo Gemini: [bold]{model}[/bold]\n"
             f"Estado de conexión: {status}\n\n"
             f"Herramientas MCP disponibles: [bold]{mcp_tool_count}[/bold]\n\n"
+            f"{workspace_line}"
             "Comandos: [bold]/ayuda[/bold], [bold]/herramientas[/bold], "
             "[bold]/registro[/bold], [bold]/limpiar[/bold], [bold]/salir[/bold]",
             border_style="cyan",
@@ -29,14 +41,15 @@ def show_welcome(model: str, configured: bool, mcp_tool_count: int) -> None:
 
 
 def show_help() -> None:
-    """Muestra los comandos disponibles antes de agregar herramientas MCP."""
+    """Muestra los comandos disponibles durante la sesión."""
     console.print(
         Panel(
-            "[bold]/ayuda[/bold]    Muestra esta ayuda.\n"
+            "[bold]/ayuda[/bold]        Muestra esta ayuda.\n"
             "[bold]/herramientas[/bold] Muestra las herramientas MCP disponibles.\n"
-            "[bold]/registro[/bold] Muestra las llamadas MCP de esta sesión.\n"
-            "[bold]/limpiar[/bold]  Inicia una conversación nueva.\n"
-            "[bold]/salir[/bold]    Cierra el chatbot.\n\n"
+            "[bold]/registro[/bold]     Muestra las llamadas MCP de esta sesión.\n"
+            "[bold]/limpiar[/bold]      Inicia una conversación nueva.\n"
+            "[bold]/salir[/bold]        Cierra el chatbot.\n\n"
+            "Las operaciones que puedan escribir archivos o cambiar Git pedirán confirmación. "
             "Escribe cualquier otro mensaje para enviarlo a Gemini.",
             title="Ayuda",
             border_style="blue",
@@ -55,9 +68,39 @@ def show_tools(tools: tuple[McpTool, ...]) -> None:
     table.add_column("Servidor", style="cyan")
     table.add_column("Herramienta", style="green")
     table.add_column("Descripción")
+    table.add_column("Confirmación")
     for tool in tools:
-        table.add_row(tool.server_name, tool.public_name, tool.description)
+        confirmation = "Sí" if tool.requires_confirmation else "No"
+        table.add_row(tool.server_name, tool.public_name, tool.description, confirmation)
     console.print(table)
+
+
+def confirm_mcp_call(tool: McpTool, arguments: dict[str, Any]) -> bool:
+    """Pide autorización antes de ejecutar una operación que puede modificar datos."""
+    console.print(
+        Panel(
+            f"Servidor: [bold]{tool.server_name}[/bold]\n"
+            f"Herramienta: [bold]{tool.server_tool_name}[/bold]\n"
+            f"Argumentos: {arguments}\n\n"
+            "Esta operación puede modificar archivos o el repositorio de demostración.",
+            title="Confirmación requerida",
+            border_style="yellow",
+        )
+    )
+    return ask_for_confirmation("¿Autorizar esta operación?")
+
+
+def confirm_demo_repository_initialization(workspace: str) -> bool:
+    """Solicita permiso para crear el repositorio Git aislado la primera vez."""
+    console.print(
+        Panel(
+            f"Se necesita inicializar un repositorio Git vacío en:\n[dim]{workspace}[/dim]\n\n"
+            "Este directorio está separado del proyecto y se usa únicamente para la demostración.",
+            title="Preparación inicial",
+            border_style="yellow",
+        )
+    )
+    return ask_for_confirmation("¿Inicializar este repositorio de demostración?")
 
 
 def show_mcp_call(entry: McpLogEntry) -> None:
