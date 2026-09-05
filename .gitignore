@@ -1,4 +1,4 @@
-﻿/docs/
+docs/
 
 # Python and local configuration
 .venv/
@@ -10,3 +10,6 @@ __pycache__/
 # Local application data
 data/
 logs/
+
+# Local MCP server configuration (contains absolute paths)
+mcp_servers.json

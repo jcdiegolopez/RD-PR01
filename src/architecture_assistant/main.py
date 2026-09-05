@@ -27,7 +27,7 @@ def run() -> None:
 
 
 async def run_async() -> None:
-    """Conecta los servidores oficiales y mantiene la sesión de chat activa."""
+    """Conecta los servidores MCP desde mcp_servers.json y mantiene la sesión activa."""
     settings = Settings.load()
 
     if not settings.gemini_api_key:
@@ -38,29 +38,38 @@ async def run_async() -> None:
         )
         return
 
+    if not settings.mcp_config_path.exists():
+        show_error(
+            f"No se encontró el archivo de configuración MCP: {settings.mcp_config_path}\n"
+            "Copia mcp_servers.example.json a mcp_servers.json y ajusta las rutas."
+        )
+        return
+
     provider = GeminiProvider(settings.gemini_api_key, settings.gemini_model)
     mcp_manager = McpManager()
 
     try:
-        await mcp_manager.connect_filesystem_server(settings.mcp_demo_workspace)
-        if not mcp_manager.is_git_repository(settings.mcp_demo_workspace):
-            if not confirm_demo_repository_initialization(
-                str(settings.mcp_demo_workspace)
-            ):
-                show_error(
-                    "No se inició Git porque no hubo confirmación. "
-                    "La sesión no puede continuar sin el servidor Git."
-                )
-                return
-            mcp_manager.initialize_demo_repository(settings.mcp_demo_workspace)
-        await mcp_manager.connect_git_server(settings.mcp_demo_workspace)
-        if settings.arch_server_path and settings.arch_server_path.exists():
-            await mcp_manager.connect_architecture_server(settings.arch_server_path)
-        elif settings.arch_server_path:
-            show_error(
-                f"ARCH_SERVER_PATH apunta a un archivo inexistente: "
-                f"{settings.arch_server_path}. El servidor de arquitectura no se conectará."
-            )
+        server_configs = McpManager.load_server_configs(settings.mcp_config_path)
+
+        for server_name, server_config in server_configs.items():
+            # El servidor Git requiere que el workspace tenga un repositorio Git
+            if server_name == "git":
+                if not mcp_manager.is_git_repository(settings.mcp_demo_workspace):
+                    if not confirm_demo_repository_initialization(
+                        str(settings.mcp_demo_workspace)
+                    ):
+                        show_error(
+                            "No se inició Git porque no hubo confirmación. "
+                            "La sesión no puede continuar sin el servidor Git."
+                        )
+                        return
+                    mcp_manager.initialize_demo_repository(settings.mcp_demo_workspace)
+            # El servidor Filesystem necesita que el workspace exista
+            if server_name == "filesystem":
+                settings.mcp_demo_workspace.mkdir(parents=True, exist_ok=True)
+
+            await mcp_manager.connect_from_config(server_name, server_config)
+
         show_welcome(
             settings.gemini_model,
             configured=True,
@@ -69,9 +78,10 @@ async def run_async() -> None:
         )
         await chat_loop(provider, mcp_manager)
     except Exception as error:
-        show_error(f"No fue posible iniciar los servidores MCP oficiales: {error}")
+        show_error(f"No fue posible iniciar los servidores MCP: {error}")
     finally:
         await mcp_manager.close()
+
 
 
 async def chat_loop(provider: GeminiProvider, mcp_manager: McpManager) -> None:

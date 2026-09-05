@@ -2,8 +2,10 @@
 
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
+import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 from typing import Any
@@ -51,44 +53,54 @@ class McpManager:
         )
         return await self.connect_stdio("demostracion", parameters)
 
-    async def connect_filesystem_server(self, workspace: Path) -> tuple[McpTool, ...]:
-        """Inicia el servidor oficial Filesystem limitado a una carpeta aislada."""
-        workspace.mkdir(parents=True, exist_ok=True)
-        parameters = StdioServerParameters(
-            command="cmd",
-            args=[
-                "/c",
-                "npx",
-                "-y",
-                "@modelcontextprotocol/server-filesystem",
-                str(workspace),
-            ],
-            cwd=str(workspace),
-            env=dict(os.environ),
-        )
-        return await self.connect_stdio("filesystem", parameters)
+    # ── config-based connection ──────────────────────────────────────────────
 
-    async def connect_git_server(self, workspace: Path) -> tuple[McpTool, ...]:
-        """Inicia el servidor oficial Git restringido al espacio de demostración."""
-        parameters = StdioServerParameters(
-            command=sys.executable,
-            args=["-m", "mcp_server_git", "--repository", str(workspace)],
-            cwd=str(workspace),
-            env=dict(os.environ),
-        )
-        return await self.connect_stdio("git", parameters)
+    @staticmethod
+    def load_server_configs(config_path: Path) -> dict[str, dict[str, Any]]:
+        """Lee mcp_servers.json y devuelve el dict de 'mcpServers'."""
+        with open(config_path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("mcpServers", {})
 
-    async def connect_architecture_server(
-        self, server_script: Path
+    @staticmethod
+    def _resolve(value: str, env: dict[str, str]) -> str:
+        """Sustituye ${VAR} con variables de entorno y __python__ con sys.executable."""
+        if value == "__python__":
+            return sys.executable
+        return re.sub(
+            r"\$\{([^}]+)\}",
+            lambda m: env.get(m.group(1), m.group(0)),
+            value,
+        )
+
+    async def connect_from_config(
+        self, server_name: str, server_config: dict[str, Any]
     ) -> tuple[McpTool, ...]:
-        """Inicia el servidor Spring Architecture Analyzer MCP vía stdio."""
+        """Conecta un servidor MCP usando la definición del archivo de configuración.
+
+        Soporta los mismos campos que Claude Desktop:
+          command, args, cwd, env
+        Tokens especiales en command/args/cwd:
+          __python__   → sys.executable actual
+          ${VAR}       → variable de entorno VAR
+        """
+        env_snapshot = dict(os.environ)
+        # Merge server-specific env vars (también con interpolación)
+        for key, val in server_config.get("env", {}).items():
+            env_snapshot[key] = self._resolve(val, env_snapshot)
+
+        command = self._resolve(server_config["command"], env_snapshot)
+        args = [self._resolve(a, env_snapshot) for a in server_config.get("args", [])]
+        raw_cwd = server_config.get("cwd", str(Path.cwd()))
+        cwd = self._resolve(raw_cwd, env_snapshot)
+
         parameters = StdioServerParameters(
-            command=sys.executable,
-            args=[str(server_script)],
-            cwd=str(server_script.parent),
-            env=dict(os.environ),
+            command=command,
+            args=args,
+            cwd=cwd,
+            env=env_snapshot,
         )
-        return await self.connect_stdio("architecture", parameters)
+        return await self.connect_stdio(server_name, parameters)
 
     @staticmethod
     def is_git_repository(workspace: Path) -> bool:
