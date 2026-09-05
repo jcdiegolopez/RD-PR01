@@ -94,6 +94,14 @@ class McpManager:
         raw_cwd = server_config.get("cwd", str(Path.cwd()))
         cwd = self._resolve(raw_cwd, env_snapshot)
 
+        # Asegura que cwd sea absoluto (los paths relativos se resuelven desde cwd del proceso)
+        cwd = str(Path(cwd).resolve())
+        # También resuelve args que parezcan paths de archivo
+        args = [
+            str(Path(a).resolve()) if (Path(a).suffix or Path(a).is_dir() or Path(a).is_file()) and not a.startswith("-") else a
+            for a in args
+        ]
+
         parameters = StdioServerParameters(
             command=command,
             args=args,

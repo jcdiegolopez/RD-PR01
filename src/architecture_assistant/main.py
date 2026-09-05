@@ -68,7 +68,13 @@ async def run_async() -> None:
             if server_name == "filesystem":
                 settings.mcp_demo_workspace.mkdir(parents=True, exist_ok=True)
 
-            await mcp_manager.connect_from_config(server_name, server_config)
+            try:
+                await mcp_manager.connect_from_config(server_name, server_config)
+            except Exception as server_error:
+                show_error(
+                    f"No fue posible conectar el servidor MCP '{server_name}': {server_error}"
+                )
+                return
 
         show_welcome(
             settings.gemini_model,
@@ -78,7 +84,7 @@ async def run_async() -> None:
         )
         await chat_loop(provider, mcp_manager)
     except Exception as error:
-        show_error(f"No fue posible iniciar los servidores MCP: {error}")
+        show_error(f"Error inesperado al iniciar: {error}")
     finally:
         await mcp_manager.close()
 
