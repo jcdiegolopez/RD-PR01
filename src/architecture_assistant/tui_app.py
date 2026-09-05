@@ -13,7 +13,6 @@ from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
-    Button,
     DataTable,
     Footer,
     Header,
@@ -30,19 +29,33 @@ from architecture_assistant.mcp_manager import McpManager
 from architecture_assistant.ui import make_clickable
 
 
+SLASH_COMMANDS: list[tuple[str, str]] = [
+    ("/ayuda", "Muestra ayuda y descripción del sistema"),
+    ("/herramientas", "Lista todas las herramientas MCP activas"),
+    ("/registro", "Muestra resumen de tráfico y paquetes MCP"),
+    ("/limpiar", "Reinicia la conversación y el contexto"),
+    ("/salir", "Cierra la aplicación"),
+]
+
+
 class PacketDetailModal(ModalScreen):
     """Modal emergente para inspeccionar en detalle el paquete JSON-RPC seleccionado."""
+
+    BINDINGS = [
+        Binding("escape", "dismiss_modal", "Cerrar", show=False),
+        Binding("enter", "dismiss_modal", "Cerrar", show=False),
+    ]
 
     DEFAULT_CSS = """
     PacketDetailModal {
         align: center middle;
-        background: rgba(0, 0, 0, 0.8);
+        background: rgba(0, 0, 0, 0.85);
     }
     #modal-container {
         width: 85%;
         height: 85%;
         background: #0D1117;
-        border: solid #58A6FF;
+        border: solid #388BFD;
         padding: 1 2;
     }
     #modal-title {
@@ -55,15 +68,17 @@ class PacketDetailModal(ModalScreen):
     #modal-scroll {
         height: 1fr;
     }
-    #modal-close-btn {
-        margin-top: 1;
+    #modal-footer-hint {
         dock: bottom;
-        width: 100%;
+        text-align: center;
+        color: #8B949E;
+        padding-top: 1;
+        border-top: solid #21262D;
     }
     .section-label {
         margin-top: 1;
         text-style: bold;
-        color: #E6EDF3;
+        color: #C9D1D9;
     }
     """
 
@@ -74,7 +89,7 @@ class PacketDetailModal(ModalScreen):
     def compose(self) -> ComposeResult:
         with Vertical(id="modal-container"):
             yield Label(
-                f"📡 Inspección de Trama JSON-RPC 2.0  ·  {self.entry.tool_name}",
+                f"Inspección de Trama JSON-RPC 2.0 · {self.entry.tool_name}",
                 id="modal-title",
             )
             with VerticalScroll(id="modal-scroll"):
@@ -86,7 +101,7 @@ class PacketDetailModal(ModalScreen):
                     f"**Protocolo:** `{self.entry.protocol}`  |  "
                     f"**Estado:** `{self.entry.status_code}`  |  "
                     f"**Latencia RTT:** `{self.entry.latency_ms} ms`\n\n"
-                    f"**Tamaño Paquete:** Petición ~{self.entry.request_size} B  |  "
+                    f"**Tamaño de Paquete:** Petición ~{self.entry.request_size} B  |  "
                     f"Respuesta ~{self.entry.response_size} B\n\n"
                     f"---"
                 )
@@ -101,7 +116,7 @@ class PacketDetailModal(ModalScreen):
                     },
                     "id": 1,
                 }
-                yield Label("📦 Petición JSON-RPC enviada al canal (Request):", classes="section-label")
+                yield Label("Petición JSON-RPC enviada al canal (Request):", classes="section-label")
                 yield Static(
                     Syntax(
                         json.dumps(req_obj, indent=2, ensure_ascii=False),
@@ -115,7 +130,7 @@ class PacketDetailModal(ModalScreen):
                     "result": self.entry.result,
                     "id": 1,
                 }
-                yield Label("📥 Respuesta JSON-RPC recibida del canal (Response):", classes="section-label")
+                yield Label("Respuesta JSON-RPC recibida del canal (Response):", classes="section-label")
                 yield Static(
                     Syntax(
                         json.dumps(resp_obj, indent=2, ensure_ascii=False),
@@ -124,23 +139,26 @@ class PacketDetailModal(ModalScreen):
                     )
                 )
 
-            yield Button("Cerrar Detalle [Esc]", id="modal-close-btn", variant="primary")
+            yield Label("Presiona [Esc] o [Enter] para cerrar", id="modal-footer-hint")
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "modal-close-btn":
-            self.dismiss()
-
-    def key_escape(self) -> None:
+    def action_dismiss_modal(self) -> None:
         self.dismiss()
 
 
 class ConfirmationModal(ModalScreen[bool]):
-    """Modal de confirmación para herramientas MCP de escritura (Filesystem / Git)."""
+    """Modal de confirmación para herramientas MCP de modificación."""
+
+    BINDINGS = [
+        Binding("s", "confirm_yes", "Autorizar", show=False),
+        Binding("y", "confirm_yes", "Autorizar", show=False),
+        Binding("n", "confirm_no", "Cancelar", show=False),
+        Binding("escape", "confirm_no", "Cancelar", show=False),
+    ]
 
     DEFAULT_CSS = """
     ConfirmationModal {
         align: center middle;
-        background: rgba(0, 0, 0, 0.75);
+        background: rgba(0, 0, 0, 0.85);
     }
     #confirm-box {
         width: 60%;
@@ -154,12 +172,10 @@ class ConfirmationModal(ModalScreen[bool]):
         text-style: bold;
         margin-bottom: 1;
     }
-    #confirm-buttons {
+    #confirm-hint {
         margin-top: 1;
-        height: auto;
-    }
-    #btn-yes {
-        margin-right: 2;
+        text-align: center;
+        color: #8B949E;
     }
     """
 
@@ -170,25 +186,29 @@ class ConfirmationModal(ModalScreen[bool]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="confirm-box"):
-            yield Label("⚠️ Confirmación Requerida", id="confirm-title")
+            yield Label("Confirmación Requerida", id="confirm-title")
             yield Label(
-                f"La herramienta [bold]{self.tool_name}[/bold] puede modificar archivos.\n"
+                f"La herramienta [bold]{self.tool_name}[/bold] puede modificar archivos o Git.\n"
                 f"Argumentos: {self.args}\n\n"
-                "¿Autorizar la ejecución?"
+                "¿Autorizar la operación?"
             )
-            with Horizontal(id="confirm-buttons"):
-                yield Button("Sí, autorizar", id="btn-yes", variant="success")
-                yield Button("No, cancelar", id="btn-no", variant="error")
+            yield Label(
+                "Presiona [bold green][S][/bold green] para autorizar  ·  [bold red][N][/bold red] o [Esc] para cancelar",
+                id="confirm-hint",
+            )
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        self.dismiss(event.button.id == "btn-yes")
+    def action_confirm_yes(self) -> None:
+        self.dismiss(True)
+
+    def action_confirm_no(self) -> None:
+        self.dismiss(False)
 
 
 class ArchitectureInspectorApp(App):
-    """Aplicación TUI de Terminal dividida con Chat y Protocol Inspector."""
+    """Aplicación TUI dividida: Chat interactivo e Inspector de Protocolos MCP."""
 
-    TITLE = "Asistente de Arquitectura · Protocol & Network Inspector"
-    SUB_TITLE = "Redes (Fase 3) · Model Context Protocol (MCP) Multi-Transport Host"
+    TITLE = "Asistente de Arquitectura · Inspector de Protocolos MCP"
+    SUB_TITLE = "Redes (Fase 3) · Host MCP Multi-Transporte"
 
     BINDINGS = [
         Binding("tab", "focus_next", "Cambiar Panel", show=True),
@@ -205,10 +225,10 @@ class ArchitectureInspectorApp(App):
         height: 1fr;
     }
 
-    /* ── Panel Izquierdo: Chat ── */
+    /* ── Panel Izquierdo: Chat (67% de ancho) ── */
     #chat-pane {
-        width: 56%;
-        border-right: solid #30363D;
+        width: 67%;
+        border-right: solid #21262D;
         padding: 0 1;
         background: #0D1117;
     }
@@ -227,7 +247,7 @@ class ArchitectureInspectorApp(App):
     }
 
     .user-bubble {
-        background: #1F3A24;
+        background: #172B1D;
         border: solid #238636;
         padding: 1;
         margin: 1 0;
@@ -244,10 +264,21 @@ class ArchitectureInspectorApp(App):
 
     .system-bubble {
         background: #1C1917;
-        border: solid #D97706;
+        border: solid #8B6200;
         padding: 0 1;
         margin: 0 0 1 0;
-        color: #F59E0B;
+        color: #D29922;
+    }
+
+    /* Menú de comandos con slash */
+    #slash-menu {
+        display: none;
+        background: #161B22;
+        border: solid #30363D;
+        padding: 0 1;
+        margin-bottom: 0;
+        height: auto;
+        max-height: 8;
     }
 
     #chat-input-bar {
@@ -258,21 +289,25 @@ class ArchitectureInspectorApp(App):
     }
 
     #user-input {
-        width: 1fr;
+        width: 100%;
         border: solid #30363D;
+        background: #0D1117;
     }
 
     #user-input:focus {
         border: solid #58A6FF;
     }
 
-    #send-btn {
-        margin-left: 1;
+    #input-help-text {
+        text-align: left;
+        color: #8B949E;
+        padding-top: 0;
+        padding-bottom: 0;
     }
 
-    /* ── Panel Derecho: Inspector de Red ── */
+    /* ── Panel Derecho: Inspector de Red (33% de ancho) ── */
     #inspector-pane {
-        width: 44%;
+        width: 33%;
         padding: 0 1;
         background: #0A0E17;
     }
@@ -316,10 +351,12 @@ class ArchitectureInspectorApp(App):
         height: 1fr;
     }
 
-    #inspect-full-btn {
+    #inspect-hint-label {
         dock: bottom;
-        width: 100%;
-        margin-top: 1;
+        text-align: center;
+        color: #8B949E;
+        padding-top: 1;
+        border-top: solid #21262D;
     }
     """
 
@@ -340,26 +377,32 @@ class ArchitectureInspectorApp(App):
         yield Header(show_clock=True)
 
         with Horizontal(id="main-layout"):
-            # Columna izquierda: Chat
+            # Columna izquierda: Chat (67%)
             with Vertical(id="chat-pane"):
-                yield Label("💬 Chat con Asistente de Arquitectura (Gemini)", id="chat-header-bar")
+                yield Label("CONVERSACIÓN · ASISTENTE DE ARQUITECTURA", id="chat-header-bar")
                 with VerticalScroll(id="chat-scroll"):
                     yield Static(
-                        "👋 ¡Bienvenido! Puedes pedir análisis de arquitectura, violaciones de capas, "
-                        "o generar el grafo de dependencias.\n"
-                        "Cada interacción de red se registra en vivo en el panel derecho.",
+                        "Bienvenido al Asistente de Arquitectura.\n"
+                        "Puedes solicitar análisis de dependencias, detección de violaciones de capas "
+                        "o generar el grafo de arquitectura.\n"
+                        "Las llamadas MCP y protocolos de red se registran en tiempo real en el panel derecho.",
                         classes="assistant-bubble",
                     )
-                with Horizontal(id="chat-input-bar"):
+
+                with Vertical(id="chat-input-bar"):
+                    yield Static(id="slash-menu")
                     yield Input(
-                        placeholder="Escribe tu consulta o comando (ej. 'Genera el grafo de dependencias')...",
+                        placeholder="Escribe tu consulta o escribe / para ver comandos...",
                         id="user-input",
                     )
-                    yield Button("Enviar", id="send-btn", variant="primary")
+                    yield Label(
+                        "Enter enviar  ·  / comandos  ·  Tab alternar panel  ·  Ctrl+Q salir",
+                        id="input-help-text",
+                    )
 
-            # Columna derecha: Inspector de Red
+            # Columna derecha: Inspector de Red (33%)
             with Vertical(id="inspector-pane"):
-                yield Label("🌐 Inspector de Protocolos & Tráfico de Red (JSON-RPC)", id="traffic-header")
+                yield Label("INSPECTOR DE PROTOCOLOS & TRÁFICO (JSON-RPC)", id="traffic-header")
 
                 with Container(id="traffic-table-container"):
                     table = DataTable(id="traffic-table")
@@ -367,14 +410,14 @@ class ArchitectureInspectorApp(App):
                     yield table
 
                 with Vertical(id="packet-pane"):
-                    yield Label("🔍 Detalle del Paquete Seleccionado", id="packet-pane-title")
+                    yield Label("DETALLE DEL PAQUETE SELECCIONADO", id="packet-pane-title")
                     with VerticalScroll(id="packet-scroll"):
                         yield Static(
-                            "Haz clic o navega con las flechas en la tabla de arriba "
-                            "para inspeccionar el paquete JSON-RPC 2.0 y su transporte.",
+                            "Navega con las flechas en la tabla de arriba "
+                            "para inspeccionar el paquete JSON-RPC 2.0 y sus métricas de red.",
                             id="packet-detail-view",
                         )
-                    yield Button("🔍 Ver Trama Completa [Enter]", id="inspect-full-btn", variant="default")
+                    yield Label("Presiona [Enter] para expandir la trama completa", id="inspect-hint-label")
 
         yield Footer()
 
@@ -385,11 +428,11 @@ class ArchitectureInspectorApp(App):
         tools_count = len(self.mcp_manager.tools)
         servers = set(t.server_name for t in self.mcp_manager.tools)
         welcome_note = (
-            f"**Servidores MCP conectados:** `{', '.join(servers)}`\n\n"
-            f"**Herramientas disponibles:** `{tools_count}` registradas.\n\n"
+            f"**Servidores MCP conectados:** `{', '.join(servers)}`  |  "
+            f"**Herramientas registradas:** `{tools_count}`\n\n"
             f"- **Local IPC:** `architecture` (Stdio Pipes)\n"
             f"- **Remote Edge:** `github-profiler` (Cloudflare Workers HTTP/SSE)\n\n"
-            f"*Navega con [Tab] al panel de tráfico y usa las flechas para inspeccionar tramas.*"
+            f"*Tip:* Escribe `/` para desplegar la lista de comandos disponibles."
         )
         self.add_assistant_message(welcome_note)
 
@@ -408,12 +451,20 @@ class ArchitectureInspectorApp(App):
         chat_scroll.mount(Static(text, classes="system-bubble"))
         chat_scroll.scroll_end(animate=False)
 
-    async def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "send-btn":
-            await self.handle_submit()
-        elif event.button.id == "inspect-full-btn":
-            if self.selected_entry:
-                self.app.push_screen(PacketDetailModal(self.selected_entry))
+    def on_input_changed(self, event: Input.Changed) -> None:
+        val = event.value.strip()
+        menu = self.query_one("#slash-menu", Static)
+        if val.startswith("/"):
+            matches = [c for c in SLASH_COMMANDS if c[0].startswith(val.lower())]
+            if matches:
+                lines = [
+                    f"[bold cyan]{c[0]:15}[/bold cyan] [dim]{c[1]}[/dim]"
+                    for c in matches
+                ]
+                menu.update("\n".join(lines))
+                menu.styles.display = "block"
+                return
+        menu.styles.display = "none"
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "user-input":
@@ -421,6 +472,9 @@ class ArchitectureInspectorApp(App):
 
     async def handle_submit(self) -> None:
         input_widget = self.query_one("#user-input", Input)
+        menu = self.query_one("#slash-menu", Static)
+        menu.styles.display = "none"
+
         message = input_widget.value.strip()
         if not message:
             return
@@ -428,17 +482,68 @@ class ArchitectureInspectorApp(App):
         input_widget.value = ""
         self.add_user_message(message)
 
+        # Manejo de comandos con slash
         if message in {"/salir", "/exit"}:
             self.exit()
             return
         if message in {"/limpiar", "/clear"}:
             self.action_clear_chat()
             return
+        if message in {"/ayuda", "/help"}:
+            self.show_help_message()
+            return
+        if message in {"/herramientas", "/tools"}:
+            self.show_tools_message()
+            return
+        if message in {"/registro", "/log"}:
+            self.show_log_message()
+            return
 
         input_widget.disabled = True
-        self.add_system_event("⏳ Consultando a Gemini...")
+        self.add_system_event("[MCP] Consultando a Gemini...")
 
         asyncio.create_task(self.process_message_turn(message))
+
+    def show_help_message(self) -> None:
+        help_text = (
+            "### Comandos Disponibles\n\n"
+            "- `/ayuda`: Muestra este mensaje de ayuda.\n"
+            "- `/herramientas`: Lista todas las herramientas MCP registradas.\n"
+            "- `/registro`: Resumen de las peticiones de red y paquetes JSON-RPC.\n"
+            "- `/limpiar`: Limpia el historial de la conversación.\n"
+            "- `/salir`: Cierra la aplicación.\n\n"
+            "### Navegación por Teclado\n\n"
+            "- `[Tab]`: Alterna entre el campo de chat y la tabla de tráfico.\n"
+            "- `[↑ / ↓]`: Navega por los paquetes de red registrados.\n"
+            "- `[Enter]` (en la tabla): Abre la trama JSON-RPC completa en pantalla completa.\n"
+            "- `[Ctrl+Q]`: Salir rápidamente."
+        )
+        self.add_assistant_message(help_text)
+
+    def show_tools_message(self) -> None:
+        lines = ["### Herramientas MCP Registradas\n"]
+        for tool in self.mcp_manager.tools:
+            lines.append(f"- **`{tool.public_name}`** ({tool.server_name}): {tool.description}")
+        self.add_assistant_message("\n".join(lines))
+
+    def show_log_message(self) -> None:
+        total_calls = len(self.entries)
+        if total_calls == 0:
+            self.add_assistant_message("Aún no se han registrado eventos de red en esta sesión.")
+            return
+
+        total_req_bytes = sum(e.request_size for e in self.entries)
+        total_resp_bytes = sum(e.response_size for e in self.entries)
+        avg_latency = sum(e.latency_ms for e in self.entries) / total_calls
+
+        summary = (
+            f"### Resumen de Tráfico de Red (MCP)\n\n"
+            f"- **Total de eventos:** `{total_calls}` llamadas registradas.\n"
+            f"- **Latencia promedio (RTT):** `{avg_latency:.2f} ms`\n"
+            f"- **Volumen de datos:** Peticiones ~`{total_req_bytes}` bytes | Respuestas ~`{total_resp_bytes}` bytes\n"
+            f"- **Canales utilizados:** Stdio Pipes (IPC Local) y HTTP/SSE (Cloudflare Edge)"
+        )
+        self.add_assistant_message(summary)
 
     async def process_message_turn(self, message: str) -> None:
         input_widget = self.query_one("#user-input", Input)
@@ -462,10 +567,10 @@ class ArchitectureInspectorApp(App):
                             result = self.mcp_manager.record_cancelled_call(
                                 function_call.name, function_call.arguments
                             )
-                            self.add_system_event(f"🚫 Operación cancelada: `{function_call.name}`")
+                            self.add_system_event(f"[MCP] Operación cancelada: `{function_call.name}`")
                             continue
 
-                    self.add_system_event(f"⚡ Ejecutando llamada MCP: `{function_call.name}`...")
+                    self.add_system_event(f"[MCP] Ejecutando: `{function_call.name}`...")
                     result = await self.mcp_manager.call_tool(
                         function_call.name, function_call.arguments
                     )
@@ -487,7 +592,7 @@ class ArchitectureInspectorApp(App):
                         }
                     )
 
-                self.add_system_event("⏳ Gemini procesando respuesta final...")
+                self.add_system_event("[MCP] Procesando resultados en Gemini...")
                 turn = await loop.run_in_executor(
                     None,
                     lambda: self.provider.submit_function_results(
@@ -501,7 +606,7 @@ class ArchitectureInspectorApp(App):
             self.add_assistant_message(answer)
 
         except Exception as err:
-            self.add_assistant_message(f"❌ **Error:** {err}")
+            self.add_assistant_message(f"**Error:** {err}")
         finally:
             input_widget.disabled = False
             input_widget.focus()
@@ -569,13 +674,13 @@ class ArchitectureInspectorApp(App):
             indent=2,
             ensure_ascii=False,
         )
-        if len(resp_preview) > 500:
-            resp_preview = resp_preview[:500] + "\n... [truncado en vista previa]"
+        if len(resp_preview) > 450:
+            resp_preview = resp_preview[:450] + "\n... [truncado en vista previa]"
 
         info_header = (
             f"[bold cyan]Transporte:[/bold cyan] {entry.transport}\n"
             f"[bold magenta]Protocolo:[/bold magenta] {entry.protocol}  |  "
-            f"[bold yellow]Latencia RTT:[/bold yellow] [bold]{entry.latency_ms} ms[/bold]\n"
+            f"[bold yellow]RTT:[/bold yellow] [bold]{entry.latency_ms} ms[/bold]\n"
             f"[bold green]Paquete:[/bold green] Req: {entry.request_size} B  |  Resp: {entry.response_size} B\n"
             f"[bold blue]Estado:[/bold blue] {entry.status_code}\n\n"
             f"[bold]Petición JSON-RPC:[/bold]\n{req_preview}\n\n"
