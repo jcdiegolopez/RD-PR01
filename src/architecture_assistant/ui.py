@@ -106,17 +106,23 @@ def confirm_demo_repository_initialization(workspace: str) -> bool:
 def show_mcp_call(entry: McpLogEntry) -> None:
     """Muestra una llamada MCP recién ejecutada."""
     state = "[red]error[/red]" if entry.is_error else "[green]correcta[/green]"
+    raw_text = entry.result.get("text", "")
+    if len(raw_text) > 600:
+        display_text = raw_text[:600] + f"\n... [salida truncada para la consola, {len(raw_text)} caracteres en total]"
+    else:
+        display_text = raw_text
     console.print(
         Panel(
             f"Servidor: [bold]{entry.server_name}[/bold]\n"
             f"Herramienta: [bold]{entry.tool_name}[/bold]\n"
             f"Argumentos: {entry.arguments}\n"
-            f"Resultado: {entry.result['text']}\n"
+            f"Resultado: {display_text}\n"
             f"Estado: {state}",
             title="Llamada MCP",
             border_style="magenta",
         )
     )
+
 
 
 def show_mcp_log(entries: tuple[McpLogEntry, ...]) -> None:
