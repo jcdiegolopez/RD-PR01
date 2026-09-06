@@ -213,7 +213,8 @@ class ArchitectureInspectorApp(App):
     BINDINGS = [
         Binding("tab", "focus_next", "Cambiar Panel", show=True),
         Binding("ctrl+l", "clear_chat", "Limpiar Chat", show=True),
-        Binding("ctrl+q", "quit", "Salir", show=True),
+        Binding("ctrl+c", "quit", "Salir", show=True),
+        Binding("ctrl+x", "quit", "Salir", show=False),
     ]
 
     CSS = """
@@ -396,7 +397,7 @@ class ArchitectureInspectorApp(App):
                         id="user-input",
                     )
                     yield Label(
-                        "Enter enviar  ·  / comandos  ·  Tab alternar panel  ·  Ctrl+Q salir",
+                        "Enter enviar  ·  / comandos  ·  Tab alternar panel  ·  Ctrl+C salir",
                         id="input-help-text",
                     )
 
@@ -516,7 +517,7 @@ class ArchitectureInspectorApp(App):
             "- `[Tab]`: Alterna entre el campo de chat y la tabla de tráfico.\n"
             "- `[↑ / ↓]`: Navega por los paquetes de red registrados.\n"
             "- `[Enter]` (en la tabla): Abre la trama JSON-RPC completa en pantalla completa.\n"
-            "- `[Ctrl+Q]`: Salir rápidamente."
+            "- `[Ctrl+C]` o `[Ctrl+X]`: Salir rápidamente."
         )
         self.add_assistant_message(help_text)
 
