@@ -8,6 +8,7 @@ from typing import Any
 
 from rich.syntax import Syntax
 from rich.text import Text
+from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
@@ -509,7 +510,7 @@ class ArchitectureInspectorApp(App):
         input_widget.disabled = True
         self.add_system_event("[MCP] Consultando a Gemini...")
 
-        asyncio.create_task(self.process_message_turn(message))
+        self.process_message_turn(message)
 
     def show_help_message(self) -> None:
         help_text = (
@@ -552,6 +553,7 @@ class ArchitectureInspectorApp(App):
         )
         self.add_assistant_message(summary)
 
+    @work
     async def process_message_turn(self, message: str) -> None:
         input_widget = self.query_one("#user-input", Input)
         try:
@@ -575,12 +577,16 @@ class ArchitectureInspectorApp(App):
                                 function_call.name, function_call.arguments
                             )
                             self.add_system_event(f"[MCP] Operación cancelada: `{function_call.name}`")
-                            continue
-
-                    self.add_system_event(f"[MCP] Ejecutando: `{function_call.name}`...")
-                    result = await self.mcp_manager.call_tool(
-                        function_call.name, function_call.arguments
-                    )
+                        else:
+                            self.add_system_event(f"[MCP] Ejecutando: `{function_call.name}`...")
+                            result = await self.mcp_manager.call_tool(
+                                function_call.name, function_call.arguments
+                            )
+                    else:
+                        self.add_system_event(f"[MCP] Ejecutando: `{function_call.name}`...")
+                        result = await self.mcp_manager.call_tool(
+                            function_call.name, function_call.arguments
+                        )
 
                     latest_entry = self.mcp_manager.log.entries[-1]
                     self.record_network_event(latest_entry)
