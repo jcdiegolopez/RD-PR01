@@ -139,7 +139,10 @@ class PacketDetailModal(ModalScreen):
                     )
                 )
 
-            yield Label("Presiona [Esc] o [Enter] para cerrar", id="modal-footer-hint")
+            yield Label(
+                r"Presiona [bold cyan]\[Esc][/bold cyan] o [bold cyan]\[Enter][/bold cyan] para cerrar",
+                id="modal-footer-hint",
+            )
 
     def action_dismiss_modal(self) -> None:
         self.dismiss()
@@ -193,7 +196,7 @@ class ConfirmationModal(ModalScreen[bool]):
                 "¿Autorizar la operación?"
             )
             yield Label(
-                "Presiona [bold green][S][/bold green] para autorizar  ·  [bold red][N][/bold red] o [Esc] para cancelar",
+                r"Presiona [bold green]\[S][/bold green] para autorizar  ·  [bold red]\[N][/bold red] o [bold cyan]\[Esc][/bold cyan] para cancelar",
                 id="confirm-hint",
             )
 
@@ -397,7 +400,7 @@ class ArchitectureInspectorApp(App):
                         id="user-input",
                     )
                     yield Label(
-                        "Enter enviar  ·  / comandos  ·  Tab alternar panel  ·  Ctrl+C salir",
+                        r"[bold cyan]\[Enter][/bold cyan] enviar  ·  [bold cyan]\[/][/bold cyan] comandos  ·  [bold cyan]\[Tab][/bold cyan] alternar panel  ·  [bold cyan]\[Ctrl+C][/bold cyan] salir",
                         id="input-help-text",
                     )
 
@@ -418,7 +421,10 @@ class ArchitectureInspectorApp(App):
                             "para inspeccionar el paquete JSON-RPC 2.0 y sus métricas de red.",
                             id="packet-detail-view",
                         )
-                    yield Label("Presiona [Enter] para expandir la trama completa", id="inspect-hint-label")
+                    yield Label(
+                        r"Presiona [bold cyan]\[Enter][/bold cyan] para expandir la trama completa",
+                        id="inspect-hint-label",
+                    )
 
         yield Footer()
 
