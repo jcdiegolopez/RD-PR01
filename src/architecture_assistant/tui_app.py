@@ -23,7 +23,7 @@ from textual.widgets import (
 )
 
 from architecture_assistant.config import Settings
-from architecture_assistant.llm import GeminiProvider
+from architecture_assistant.llm import GeminiProvider, SYSTEM_INSTRUCTION
 from architecture_assistant.mcp_log import McpLogEntry
 from architecture_assistant.mcp_manager import McpManager
 from architecture_assistant.ui import make_clickable
@@ -714,7 +714,11 @@ async def run_tui() -> None:
         print(f"Error: No se encontró {settings.mcp_config_path}")
         return
 
-    provider = GeminiProvider(settings.gemini_api_key, settings.gemini_model)
+    provider = GeminiProvider(
+        settings.gemini_api_key,
+        settings.gemini_model,
+        system_instruction=SYSTEM_INSTRUCTION,
+    )
     mcp_manager = McpManager()
 
     server_configs = McpManager.load_server_configs(settings.mcp_config_path)

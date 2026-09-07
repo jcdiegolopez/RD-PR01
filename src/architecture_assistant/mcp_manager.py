@@ -235,6 +235,7 @@ class McpManager:
                 "parameters": tool.input_schema,
             }
             for tool in self.tools
+            if tool.server_tool_name != "list_allowed_directories"
         ]
 
     def record_cancelled_call(

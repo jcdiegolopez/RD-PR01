@@ -36,12 +36,29 @@ class ModelTurn:
     function_calls: tuple[FunctionCall, ...]
 
 
+SYSTEM_INSTRUCTION = (
+    "Eres un asistente inteligente conectado a un anfitrión MCP (Model Context Protocol). "
+    "Tienes acceso a diferentes herramientas y servidores MCP independientes.\n"
+    "Cada servidor y herramienta tiene su propio alcance y parámetros; "
+    "no asumas que las restricciones o límites de un servidor aplican a los demás. "
+    "Cuando el usuario te pida una tarea, invoca directamente la herramienta MCP correspondiente "
+    "sin asumir bloqueos cruzados entre servidores. "
+    "Responde siempre en español de forma clara, directa y estructurada."
+)
+
+
 class GeminiProvider:
     """Sesión con estado de Gemini mediante Interactions API."""
 
-    def __init__(self, api_key: str, model: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        system_instruction: str | None = None,
+    ) -> None:
         self._client = genai.Client(api_key=api_key)
         self.model = model
+        self.system_instruction = system_instruction
         self._previous_interaction_id: str | None = None
 
     def ask(self, message: str) -> str:
@@ -52,6 +69,8 @@ class GeminiProvider:
     def start_turn(self, message: str, tools: list[dict[str, Any]]) -> ModelTurn:
         """Inicia un turno y devuelve el texto o las herramientas solicitadas."""
         request: dict[str, Any] = {"model": self.model, "input": message}
+        if self.system_instruction:
+            request["system_instruction"] = self.system_instruction
         if tools:
             request["tools"] = tools
         if self._previous_interaction_id:
@@ -73,6 +92,8 @@ class GeminiProvider:
             "input": function_results,
             "previous_interaction_id": interaction_id,
         }
+        if self.system_instruction:
+            request["system_instruction"] = self.system_instruction
         if tools:
             request["tools"] = tools
 

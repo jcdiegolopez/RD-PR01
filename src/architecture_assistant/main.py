@@ -6,7 +6,11 @@ import json
 from rich.panel import Panel
 
 from architecture_assistant.config import Settings
-from architecture_assistant.llm import GeminiProvider, ProviderUnavailableError
+from architecture_assistant.llm import (
+    GeminiProvider,
+    ProviderUnavailableError,
+    SYSTEM_INSTRUCTION,
+)
 from architecture_assistant.mcp_manager import McpManager
 from architecture_assistant.ui import (
     confirm_demo_repository_initialization,
@@ -50,7 +54,11 @@ async def run_async() -> None:
         )
         return
 
-    provider = GeminiProvider(settings.gemini_api_key, settings.gemini_model)
+    provider = GeminiProvider(
+        settings.gemini_api_key,
+        settings.gemini_model,
+        system_instruction=SYSTEM_INSTRUCTION,
+    )
     mcp_manager = McpManager()
 
     try:
