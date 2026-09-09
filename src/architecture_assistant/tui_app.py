@@ -731,6 +731,13 @@ async def run_tui() -> None:
     for server_name, server_config in server_configs.items():
         if server_name == "filesystem":
             settings.mcp_demo_workspace.mkdir(parents=True, exist_ok=True)
+        elif server_name == "git":
+            settings.mcp_demo_workspace.mkdir(parents=True, exist_ok=True)
+            if not mcp_manager.is_git_repository(settings.mcp_demo_workspace):
+                try:
+                    mcp_manager.initialize_demo_repository(settings.mcp_demo_workspace)
+                except Exception as git_init_err:
+                    print(f"No se pudo inicializar git en el workspace demo: {git_init_err}")
         try:
             await mcp_manager.connect_from_config(server_name, server_config)
         except Exception as e:
